@@ -13,47 +13,116 @@ def get_local_ip():
     finally:
         s.close()
 
-def run_boot_sequence(driver, width=64, height=32):
-    print("[INFO] Starting Boot & Hardware Test Sequence...")
+def make_test_pattern(width=64, height=32):
+    """
+    Classic broadcast SMPTE-style color bar calibration test pattern.
+    """
+    img = Image.new("RGB", (width, height))
+    draw = ImageDraw.Draw(img)
 
-    # 1. Primary Colors & White Test Flash (0.4s each)
+    # 1. 8 Main Color Bars (top 20 rows)
+    # White, Yellow, Cyan, Green, Magenta, Red, Blue, Black
+    bars = [
+        (255, 255, 255),  # White
+        (255, 255, 0),    # Yellow
+        (0, 255, 255),    # Cyan
+        (0, 255, 0),      # Green
+        (255, 0, 255),    # Magenta
+        (255, 0, 0),      # Red
+        (0, 0, 255),      # Blue
+        (20, 20, 20)      # Dark / Black
+    ]
+    bar_w = width // len(bars)
+    for i, color in enumerate(bars):
+        x0 = i * bar_w
+        x1 = (i + 1) * bar_w if i < len(bars) - 1 else width
+        draw.rectangle((x0, 0, x1 - 1, 18), fill=color)
+
+    # 2. Grayscale Ramp (rows 19 to 24)
+    gray_steps = 8
+    gw = width // gray_steps
+    for i in range(gray_steps):
+        val = int((i / (gray_steps - 1)) * 255)
+        x0 = i * gw
+        x1 = (i + 1) * gw if i < gray_steps - 1 else width
+        draw.rectangle((x0, 19, x1 - 1, 24), fill=(val, val, val))
+
+    # 3. Complementary blocks & alignment (rows 25 to 31)
+    comp_colors = [
+        (0, 0, 255), (0, 0, 0), (255, 0, 255), (0, 0, 0),
+        (0, 255, 255), (0, 0, 0), (255, 255, 255), (100, 100, 100)
+    ]
+    cw = width // len(comp_colors)
+    for i, color in enumerate(comp_colors):
+        x0 = i * cw
+        x1 = (i + 1) * cw if i < len(comp_colors) - 1 else width
+        draw.rectangle((x0, 25, x1 - 1, 31), fill=color)
+
+    return np.array(img, dtype=np.uint8)
+
+def run_boot_sequence(driver, width=64, height=32):
+    print("[INFO] Starting Boot Diagnostics (RGBW -> Test Pattern -> Scrolling IP)...")
+
+    # Step 1: Full-screen Flash R -> G -> B -> W (0.35s each)
     test_colors = [
         ("RED", (255, 0, 0)),
         ("GREEN", (0, 255, 0)),
         ("BLUE", (0, 0, 255)),
         ("WHITE", (255, 255, 255))
     ]
-
     for name, col in test_colors:
         frame = np.zeros((height, width, 3), dtype=np.uint8)
         frame[:] = col
         driver.display_frame(frame)
-        time.sleep(0.4)
+        time.sleep(0.35)
 
-    # 2. Test Pattern / Splash Screen with IP Address
+    # Step 2: SMPTE Color Bar Test Pattern (hold for 2.0s)
+    pattern = make_test_pattern(width, height)
+    driver.display_frame(pattern)
+    time.sleep(2.0)
+
+    # Step 3: Smooth Scrolling IP Banner
     ip = get_local_ip()
-    splash = Image.new("RGB", (width, height), (5, 5, 20))
-    draw = ImageDraw.Draw(splash)
-    
-    # Outer Border
-    draw.rectangle((0, 0, width - 1, height - 1), outline=(0, 200, 255))
-    
-    # Text header
+    msg = f"  ONLINE  •  IP: {ip}  •  ONLINE  "
     font = ImageFont.load_default()
-    draw.text((14, 3), "ONLINE", fill=(255, 230, 0), font=font)
     
-    # Display IP Address
-    # In 64x32, 15 chars like 192.168.178.104 fits nicely
-    draw.text((2, 17), ip, fill=(0, 255, 200), font=font)
+    # Calculate text width
+    bbox = font.getbbox(msg)
+    text_w = bbox[2] - bbox[0]
+    text_h = bbox[3] - bbox[1]
+
+    # Pre-render text onto an off-screen strip
+    text_img = Image.new("RGB", (text_w, height), (0, 0, 0))
+    text_draw = ImageDraw.Draw(text_img)
     
-    splash_arr = np.array(splash)
-    driver.display_frame(splash_arr)
-    time.sleep(2.5)
+    # Top status bar: glowing mini line
+    # Scrolling text in vibrant cyan/amber
+    text_draw.text((0, (height - text_h) // 2), msg, fill=(0, 255, 220), font=font)
 
-    # 3. Smooth Fade Out to Black
-    for alpha in np.linspace(1.0, 0.0, 15):
-        fade_frame = (splash_arr * alpha).astype(np.uint8)
-        driver.display_frame(fade_frame)
-        time.sleep(0.02)
+    # Scroll smoothly across from right to left
+    # Speed: ~50 pixels per second
+    fps = 40
+    dt = 1.0 / fps
+    total_distance = width + text_w
+    scroll_speed = 45.0  # pixels per second
 
-    print("[INFO] Boot sequence finished. Transitioning to visuals...")
+    x_pos = float(width)
+    while x_pos > -text_w:
+        frame = Image.new("RGB", (width, height), (5, 5, 15))
+        draw = ImageDraw.Draw(frame)
+        
+        # Border
+        draw.rectangle((0, 0, width - 1, height - 1), outline=(0, 100, 255))
+        
+        # Paste text slice
+        frame.paste(text_img, (int(x_pos), 0))
+        
+        driver.display_frame(np.array(frame, dtype=np.uint8))
+        time.sleep(dt)
+        x_pos -= scroll_speed * dt
+
+    # Step 4: Quick fade to black before visuals
+    fade = np.zeros((height, width, 3), dtype=np.uint8)
+    driver.display_frame(fade)
+    time.sleep(0.2)
+    print("[INFO] Boot sequence complete. Transitioning to visual engine...")
