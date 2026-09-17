@@ -31,7 +31,7 @@ def parse_args():
     parser.add_argument("--mapping", type=str, default=MatrixConfig.HARDWARE_MAPPING,
                         help=f"Hardware mapping (default: {MatrixConfig.HARDWARE_MAPPING})")
     parser.add_argument("--panel-type", type=str, default=getattr(MatrixConfig, "PANEL_TYPE", "FM6126A"),
-                        help=f"Panel driver chip type (default: {getattr(MatrixConfig, PANEL_TYPE, FM6126A)})")
+                        help=f"Panel driver chip type (default: {"FM6126A"})")
     return parser.parse_args()
 
 def main():

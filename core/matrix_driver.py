@@ -39,7 +39,7 @@ class MatrixDriver:
 
         self.matrix = RGBMatrix(options=options)
         self.canvas = self.matrix.CreateFrameCanvas()
-        print(f"[INFO] Initialized RGB Matrix: {self.config.COLS}x{self.config.ROWS} (Bonnet: {self.config.HARDWARE_MAPPING}, Panel: {getattr(self.config, PANEL_TYPE, Default)})")
+        print(f"[INFO] Initialized RGB Matrix: {self.config.COLS}x{self.config.ROWS} (Bonnet: {self.config.HARDWARE_MAPPING}, Panel: {self.config.PANEL_TYPE})")
 
     def display_frame(self, rgb_numpy_array):
         """
