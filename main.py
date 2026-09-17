@@ -1,4 +1,3 @@
-#!/usr/bin/env bash
 #!/usr/bin/env python3
 import sys
 import time
@@ -7,6 +6,7 @@ import argparse
 from config import MatrixConfig
 from core.matrix_driver import MatrixDriver
 from core.palette import ColorPaletteManager
+from core.boot_sequence import run_boot_sequence
 from visuals import EFFECTS
 
 running = True
@@ -32,6 +32,10 @@ def parse_args():
                         help=f"Hardware mapping (default: {MatrixConfig.HARDWARE_MAPPING})")
     parser.add_argument("--panel-type", type=str, default=getattr(MatrixConfig, "PANEL_TYPE", "FM6126A"),
                         help=f"Panel driver chip type (default: {"FM6126A"})")
+    parser.add_argument("--startup-test", action="store_true", default=True,
+                        help="Run short color & IP diagnostic test on start (default: True)")
+    parser.add_argument("--no-startup-test", dest="startup_test", action="store_false",
+                        help="Skip startup test sequence")
     return parser.parse_args()
 
 def main():
@@ -57,6 +61,10 @@ def main():
     # Initialize Hardware and Palette Manager
     driver = MatrixDriver(MatrixConfig)
     palette = ColorPaletteManager()
+
+    # Optional Boot & Hardware Diagnostic Sequence
+    if args.startup_test:
+        run_boot_sequence(driver, MatrixConfig.COLS, MatrixConfig.ROWS)
 
     # Instantiate visual effects
     effects_list = [
