@@ -10,11 +10,13 @@ class MatrixConfig:
     PARALLEL = 1
     
     # Wiring & Bonnet settings
-    # 'adafruit-hat' is standard for Adafruit RGB Matrix Bonnet and compatible clones
-    HARDWARE_MAPPING = 'adafruit-hat'
+    HARDWARE_MAPPING = "adafruit-hat"
+    
+    # Waveshare P5 panels use the FM6126A shift register driver chip
+    PANEL_TYPE = "FM6126A"
     
     # GPIO Slowdown:
-    # Pi 3 typically needs 1. Pi 4 needs 4. Pi 0/1/2 needs 0.
+    # Pi 3 needs 1
     GPIO_SLOWDOWN = 1
     
     # Brightness (0 to 100%)
@@ -25,7 +27,6 @@ class MatrixConfig:
     PWM_LSB_NANOSECONDS = 130
     
     # Scan rate / Multiplexing
-    # HUB75-D 1:16 scan for 32 rows uses standard direct address (0)
     MULTIPLEXING = 0
     ROW_ADDRESS_TYPE = 0
     

@@ -34,15 +34,18 @@ class MatrixDriver:
         options.row_address_type = self.config.ROW_ADDRESS_TYPE
         options.show_refresh_rate = self.config.SHOW_REFRESH_RATE
 
+        if hasattr(self.config, "PANEL_TYPE") and self.config.PANEL_TYPE:
+            options.panel_type = self.config.PANEL_TYPE
+
         self.matrix = RGBMatrix(options=options)
         self.canvas = self.matrix.CreateFrameCanvas()
-        print(f"[INFO] Initialized RGB Matrix: {self.config.COLS}x{self.config.ROWS} (Bonnet: {self.config.HARDWARE_MAPPING})")
+        print(f"[INFO] Initialized RGB Matrix: {self.config.COLS}x{self.config.ROWS} (Bonnet: {self.config.HARDWARE_MAPPING}, Panel: {getattr(self.config, PANEL_TYPE, Default)})")
 
     def display_frame(self, rgb_numpy_array):
         """
         Takes a (H, W, 3) uint8 numpy array, converts to PIL Image, and swaps buffers.
         """
-        img = Image.fromarray(rgb_numpy_array, mode='RGB')
+        img = Image.fromarray(rgb_numpy_array, mode="RGB")
         if self.has_hardware and self.canvas is not None:
             self.canvas.SetImage(img)
             self.canvas = self.matrix.SwapOnVSync(self.canvas)

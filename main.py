@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 #!/usr/bin/env python3
 import sys
 import time
@@ -29,6 +30,8 @@ def parse_args():
                         help=f"Target frames per second (default: {MatrixConfig.FPS_LIMIT})")
     parser.add_argument("--mapping", type=str, default=MatrixConfig.HARDWARE_MAPPING,
                         help=f"Hardware mapping (default: {MatrixConfig.HARDWARE_MAPPING})")
+    parser.add_argument("--panel-type", type=str, default=getattr(MatrixConfig, "PANEL_TYPE", "FM6126A"),
+                        help=f"Panel driver chip type (default: {getattr(MatrixConfig, PANEL_TYPE, FM6126A)})")
     return parser.parse_args()
 
 def main():
@@ -43,10 +46,12 @@ def main():
     MatrixConfig.GPIO_SLOWDOWN = args.slowdown
     MatrixConfig.FPS_LIMIT = args.fps
     MatrixConfig.HARDWARE_MAPPING = args.mapping
+    MatrixConfig.PANEL_TYPE = args.panel_type
 
     print("=" * 60)
     print(f"Starting LED Matrix Visuals ({MatrixConfig.COLS}x{MatrixConfig.ROWS})")
     print(f"Effect: {args.effect} | Brightness: {args.brightness}% | Target FPS: {args.fps}")
+    print(f"Mapping: {args.mapping} | Panel Type: {args.panel_type}")
     print("=" * 60)
 
     # Initialize Hardware and Palette Manager
