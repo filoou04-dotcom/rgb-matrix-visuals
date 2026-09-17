@@ -16,18 +16,17 @@ class MatrixConfig:
     PANEL_TYPE = "FM6126A"
     
     # GPIO Slowdown:
-    # 2 provides cleaner signal transitions on Pi 3 and eliminates ghosting/vertical lines
-    GPIO_SLOWDOWN = 2
+    # 1 gives maximum refresh rate on Pi 3
+    GPIO_SLOWDOWN = 1
     
     # Brightness (0 to 100%)
-    DEFAULT_BRIGHTNESS = 60
+    DEFAULT_BRIGHTNESS = 65
     
-    # Anti-flicker & Timing optimization:
-    # 10 PWM bits delivers significantly higher refresh rates (>250Hz)
-    PWM_BITS = 10
-    # 200ns ensures clean OE and latch timings on FM6126A
-    PWM_LSB_NANOSECONDS = 200
-    PWM_DITHER_BITS = 0
+    # High-Refresh Anti-Flicker Tuning:
+    # 8 PWM bits = full 24-bit TrueColor (16.7M colors) while achieving ~250-280Hz refresh rate!
+    PWM_BITS = 8
+    PWM_DITHER_BITS = 1
+    PWM_LSB_NANOSECONDS = 130
     
     # Scan rate / Multiplexing
     MULTIPLEXING = 0
