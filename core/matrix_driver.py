@@ -21,10 +21,11 @@ class MatrixDriver:
             print("[INFO] Running in mock/emulated mode (rgbmatrix not installed on this host).")
             return
 
-        # Bind to isolated CPU core 3 for jitter-free real-time rendering
+        # Pin Python process to Cores 0, 1, 2, leaving Core 3 exclusively
+        # to the C++ real-time GPIO refresh thread (prio 99, SCHED_FIFO).
         try:
-            os.sched_setaffinity(0, {3})
-            print("[INFO] Pinned process to isolated CPU Core 3")
+            os.sched_setaffinity(0, {0, 1, 2})
+            print("[INFO] Python pinned to CPU Cores 0-2 (Core 3 reserved for C++ hardware refresh)")
         except Exception as e:
             pass
 
