@@ -1,4 +1,5 @@
 import sys
+import os
 from PIL import Image
 
 try:
@@ -20,6 +21,13 @@ class MatrixDriver:
             print("[INFO] Running in mock/emulated mode (rgbmatrix not installed on this host).")
             return
 
+        # Bind to isolated CPU core 3 for jitter-free real-time rendering
+        try:
+            os.sched_setaffinity(0, {3})
+            print("[INFO] Pinned process to isolated CPU Core 3")
+        except Exception as e:
+            pass
+
         options = RGBMatrixOptions()
         options.rows = self.config.ROWS
         options.cols = self.config.COLS
@@ -34,12 +42,15 @@ class MatrixDriver:
         options.row_address_type = self.config.ROW_ADDRESS_TYPE
         options.show_refresh_rate = self.config.SHOW_REFRESH_RATE
 
+        if hasattr(self.config, "PWM_DITHER_BITS"):
+            options.pwm_dither_bits = self.config.PWM_DITHER_BITS
+
         if hasattr(self.config, "PANEL_TYPE") and self.config.PANEL_TYPE:
             options.panel_type = self.config.PANEL_TYPE
 
         self.matrix = RGBMatrix(options=options)
         self.canvas = self.matrix.CreateFrameCanvas()
-        print(f"[INFO] Initialized RGB Matrix: {self.config.COLS}x{self.config.ROWS} (Bonnet: {self.config.HARDWARE_MAPPING}, Panel: {self.config.PANEL_TYPE})")
+        print(f"[INFO] Initialized RGB Matrix: {self.config.COLS}x{self.config.ROWS} (Bonnet: {self.config.HARDWARE_MAPPING}, Panel: {self.config.PANEL_TYPE}, Slowdown: {self.config.GPIO_SLOWDOWN}, PWM Bits: {self.config.PWM_BITS})")
 
     def display_frame(self, rgb_numpy_array):
         """
