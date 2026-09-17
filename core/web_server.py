@@ -9,7 +9,7 @@ class EngineState:
     def __init__(self):
         self.lock = threading.Lock()
         self.current_effect = "plasma"
-        self.mode = "cycle"  # "cycle" or "manual"
+        self.mode = "cycle"
         self.target_effect = None
         self.brightness = 65
         self.fps = 50.0
@@ -47,8 +47,8 @@ class EngineState:
         undervoltage_now = False
         undervoltage_past = False
         throttled_now = False
-        status_text = "Optimal"
-        status_color = "#00e676"
+        status_text = "Stabil"
+        status_level = "ok"
 
         try:
             import subprocess
@@ -62,24 +62,24 @@ class EngineState:
             undervoltage_past = bool(val & 0x10000)
 
             if undervoltage_now:
-                status_text = "Warnung: Unterspannung JETZT aktiv (<4.65V)!"
-                status_color = "#ff1744"
+                status_text = "Unterspannung aktiv (<4.65V)"
+                status_level = "error"
             elif throttled_now:
-                status_text = "Warnung: CPU gedrosselt (Hitze/Strom)!"
-                status_color = "#ff9100"
+                status_text = "CPU gedrosselt (Temperatur/Spannung)"
+                status_level = "warning"
             elif undervoltage_past:
-                status_text = "Normalbetrieb (Fruehere Unterspannung registriert)"
-                status_color = "#ffd600"
+                status_text = "Unterspannung in Historie registriert"
+                status_level = "warning"
             else:
-                status_text = "Systemzustand stabil"
-                status_color = "#00e676"
+                status_text = "Normalbetrieb"
+                status_level = "ok"
         except Exception:
             pass
 
         uptime_sec = int(time.time() - self.start_time)
         m, s = divmod(uptime_sec, 60)
         h, m = divmod(m, 60)
-        uptime_str = f"{h}h {m}m {s}s" if h else f"{m}m {s}s"
+        uptime_str = f"{h:02d}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}"
 
         return {
             "temp": temp,
@@ -88,7 +88,7 @@ class EngineState:
             "undervoltage_past": undervoltage_past,
             "throttled_now": throttled_now,
             "status_text": status_text,
-            "status_color": status_color,
+            "status_level": status_level,
             "uptime": uptime_str
         }
 
@@ -97,139 +97,413 @@ HTML_DASHBOARD = """<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>RGB LED Matrix Controller</title>
+    <title>RGB Matrix Controller</title>
     <style>
         :root {
-            --bg: #0b0f19;
-            --card-bg: #151b2b;
-            --card-border: #232d42;
-            --accent: #00f0ff;
-            --accent-glow: rgba(0, 240, 255, 0.35);
-            --text: #f0f6fc;
-            --text-muted: #8b9bb4;
+            --bg: #09090b;
+            --surface: #121215;
+            --surface-elevated: #18181b;
+            --border: #27272a;
+            --border-hover: #3f3f46;
+            --text-primary: #f4f4f5;
+            --text-secondary: #a1a1aa;
+            --text-tertiary: #71717a;
+            --accent: #ffffff;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", sans-serif;
+            --font-mono: ui-monospace, "SF Mono", "Roboto Mono", Menlo, Consolas, monospace;
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
-        body { background: var(--bg); color: var(--text); padding: 16px; display: flex; justify-content: center; min-height: 100vh; }
-        .container { width: 100%; max-width: 520px; display: flex; flex-direction: column; gap: 16px; }
-        
-        header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; border-bottom: 1px solid var(--card-border); }
-        .title-area { display: flex; align-items: center; gap: 8px; }
-        .dot { width: 10px; height: 10px; border-radius: 50%; background: #00e676; box-shadow: 0 0 10px #00e676; }
-        h1 { font-size: 1.2rem; font-weight: 700; letter-spacing: 0.5px; }
-        .badge { background: #1e2638; border: 1px solid var(--card-border); padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; color: var(--accent); font-weight: 600; }
 
-        .card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 16px; padding: 18px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
-        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        
-        .stat-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; margin-bottom: 4px; }
-        .stat-value { font-size: 1.5rem; font-weight: 800; color: #fff; }
-        .status-pill { display: inline-block; padding: 6px 12px; border-radius: 10px; font-size: 0.8rem; font-weight: 600; margin-top: 6px; width: 100%; text-align: center; }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
 
-        .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
-        .section-title { font-size: 0.85rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; }
-        
-        /* Effect Buttons */
-        .btn-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-        .effect-btn { background: #1b2234; color: var(--text); border: 1px solid var(--card-border); padding: 14px 10px; border-radius: 12px; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); display: flex; align-items: center; justify-content: center; gap: 8px; }
-        .effect-btn:active { transform: scale(0.98); }
-        .effect-btn.active { background: var(--accent); color: #000; border-color: var(--accent); box-shadow: 0 0 16px var(--accent-glow); font-weight: 700; }
+        body {
+            background-color: var(--bg);
+            color: var(--text-primary);
+            font-family: var(--font-sans);
+            font-size: 13px;
+            line-height: 1.5;
+            padding: 24px 16px;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+        }
 
-        /* Brightness Slider & Presets */
-        .brightness-val { font-size: 1.3rem; font-weight: 800; color: var(--accent); }
-        .slider-wrap { margin: 12px 0 16px 0; }
-        input[type="range"] { width: 100%; height: 8px; border-radius: 4px; background: #232d42; outline: none; -webkit-appearance: none; accent-color: var(--accent); cursor: pointer; }
-        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 12px var(--accent); cursor: pointer; }
+        .container {
+            width: 100%;
+            max-width: 440px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
 
-        .presets { display: flex; gap: 8px; justify-content: space-between; }
-        .preset-btn { flex: 1; background: #1b2234; border: 1px solid var(--card-border); color: var(--text-muted); padding: 8px 4px; border-radius: 8px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: 0.2s; }
-        .preset-btn:hover { color: #fff; border-color: var(--accent); }
+        /* Header */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border);
+        }
 
-        /* Power Switch */
-        .switch-row { display: flex; justify-content: space-between; align-items: center; margin-top: 4px; }
-        .power-btn { background: #1b2234; color: #fff; border: 1px solid var(--card-border); padding: 10px 18px; border-radius: 10px; font-weight: 700; font-size: 0.9rem; cursor: pointer; transition: 0.2s; display: flex; align-items: center; gap: 8px; }
-        .power-btn.on { background: #1b4b35; border-color: #00e676; color: #00e676; }
-        .power-btn.off { background: #4b1b1b; border-color: #ff1744; color: #ff1744; }
+        .header-title {
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .header-status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background-color: var(--success);
+        }
+
+        .header-meta {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: var(--text-tertiary);
+            letter-spacing: 0.02em;
+        }
+
+        /* Card Component */
+        .card {
+            background-color: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px 16px;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .card-label {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-tertiary);
+        }
+
+        .card-badge {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        /* Metrics Grid */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+
+        .metric-block {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .metric-label {
+            font-size: 11px;
+            color: var(--text-tertiary);
+        }
+
+        .metric-value {
+            font-family: var(--font-mono);
+            font-size: 18px;
+            font-weight: 500;
+            color: var(--text-primary);
+            letter-spacing: -0.02em;
+        }
+
+        .metric-value.unit {
+            font-size: 12px;
+            color: var(--text-secondary);
+            font-weight: 400;
+            margin-left: 2px;
+        }
+
+        .status-row {
+            margin-top: 12px;
+            padding-top: 10px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background-color: var(--success);
+        }
+
+        .status-dot.ok { background-color: var(--success); }
+        .status-dot.warning { background-color: var(--warning); }
+        .status-dot.error { background-color: var(--error); }
+
+        /* Segmented Button Group (Effect Selection) */
+        .segmented-control {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 4px;
+            background-color: var(--surface-elevated);
+            padding: 3px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+        }
+
+        .segment-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            padding: 7px 0;
+            font-family: var(--font-sans);
+            font-size: 12px;
+            font-weight: 500;
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.15s ease;
+        }
+
+        .segment-btn:hover {
+            color: var(--text-primary);
+        }
+
+        .segment-btn.active {
+            background-color: var(--border);
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        /* Range Slider */
+        .slider-container {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .slider-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+        }
+
+        .slider-value-display {
+            font-family: var(--font-mono);
+            font-size: 15px;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 4px;
+            border-radius: 2px;
+            background-color: var(--border);
+            outline: none;
+            cursor: pointer;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background-color: var(--text-primary);
+            border: 1px solid var(--border-hover);
+            cursor: pointer;
+            transition: transform 0.1s ease;
+        }
+
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.15);
+        }
+
+        /* Preset Buttons */
+        .preset-row {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+        }
+
+        .preset-btn {
+            background-color: var(--surface-elevated);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            font-family: var(--font-mono);
+            font-size: 11px;
+            padding: 6px 0;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: border-color 0.15s ease, color 0.15s ease;
+            text-align: center;
+        }
+
+        .preset-btn:hover {
+            border-color: var(--border-hover);
+            color: var(--text-primary);
+        }
+
+        /* Output / Power Toggle Row */
+        .toggle-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .toggle-text {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .toggle-title {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .toggle-subtitle {
+            font-size: 11px;
+            color: var(--text-tertiary);
+        }
+
+        .btn-toggle {
+            background-color: var(--surface-elevated);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            font-family: var(--font-sans);
+            font-size: 12px;
+            font-weight: 500;
+            padding: 6px 14px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .btn-toggle:hover {
+            border-color: var(--border-hover);
+        }
+
+        .btn-toggle.state-off {
+            color: var(--text-tertiary);
+            background-color: transparent;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
-            <div class="title-area">
-                <div class="dot" id="live-dot"></div>
-                <h1>LED Matrix Control</h1>
+            <div class="header-title">
+                <span class="header-status-dot" id="header-dot"></span>
+                Matrix Controller
             </div>
-            <span class="badge">64x32 HUB75-D</span>
+            <div class="header-meta">64x32 HUB75-D</div>
         </header>
 
-        <!-- Live Hardware Stats -->
-        <div class="card grid-2">
-            <div>
-                <div class="stat-label">CPU Temperatur</div>
-                <div class="stat-value" id="temp-val">-- °C</div>
-            </div>
-            <div>
-                <div class="stat-label">Matrix Refresh</div>
-                <div class="stat-value" id="fps-val">-- FPS</div>
-            </div>
-            <div style="grid-column: span 2;">
-                <div class="stat-label">Hardware-Status & Netzteil</div>
-                <div id="status-pill" class="status-pill" style="background: #1b2234; color: #8b9bb4;">Verbinde mit Matrix...</div>
-            </div>
-        </div>
-
-        <!-- Visuals Selection -->
+        <!-- System Metrics -->
         <div class="card">
-            <div class="section-header">
-                <span class="section-title">Animation W&auml;hlen</span>
-                <span id="current-badge" style="font-size: 0.8rem; color: var(--accent); font-weight: 600;">--</span>
+            <div class="card-header">
+                <span class="card-label">Telemetrie</span>
+                <span class="card-badge" id="uptime-val">00:00</span>
             </div>
-            <div class="btn-grid">
-                <button class="effect-btn" id="btn-cycle" onclick="setEffect(cycle)">
-                    <span>&#128257;</span> Auto-Cycle
-                </button>
-                <button class="effect-btn" id="btn-plasma" onclick="setEffect(plasma)">
-                    <span>&#127754;</span> Fluid Plasma
-                </button>
-                <button class="effect-btn" id="btn-metaballs" onclick="setEffect(metaballs)">
-                    <span>&#129514;</span> Metaballs
-                </button>
-                <button class="effect-btn" id="btn-waves" onclick="setEffect(waves)">
-                    <span>&#127752;</span> Fluid Waves
-                </button>
-            </div>
-        </div>
-
-        <!-- Brightness Slider & Presets -->
-        <div class="card">
-            <div class="section-header">
-                <span class="section-title">LED Helligkeit</span>
-                <span class="brightness-val" id="bright-val">65 %</span>
-            </div>
-            
-            <div class="slider-wrap">
-                <input type="range" id="bright-slider" min="5" max="100" value="65" 
-                       oninput="onSliderDrag(this.value)" 
-                       onchange="sendBrightness(this.value)">
-            </div>
-
-            <div class="presets">
-                <button class="preset-btn" onclick="applyPreset(25)">25 %</button>
-                <button class="preset-btn" onclick="applyPreset(50)">50 %</button>
-                <button class="preset-btn" onclick="applyPreset(70)">70 %</button>
-                <button class="preset-btn" onclick="applyPreset(100)">100 %</button>
-            </div>
-        </div>
-
-        <!-- Power & Display State -->
-        <div class="card">
-            <div class="switch-row">
-                <div>
-                    <div class="stat-label">Display Zustand</div>
-                    <div style="font-size: 0.95rem; font-weight: 600;" id="power-desc">Panel aktiv</div>
+            <div class="metrics-grid">
+                <div class="metric-block">
+                    <span class="metric-label">CPU Temperatur</span>
+                    <div>
+                        <span class="metric-value" id="temp-val">--</span>
+                        <span class="metric-value unit">&deg;C</span>
+                    </div>
                 </div>
-                <button id="power-btn" class="power-btn on" onclick="togglePower()">
-                    <span>&#9211;</span> AN
-                </button>
+                <div class="metric-block">
+                    <span class="metric-label">Bildrate</span>
+                    <div>
+                        <span class="metric-value" id="fps-val">--</span>
+                        <span class="metric-value unit">FPS</span>
+                    </div>
+                </div>
+            </div>
+            <div class="status-row">
+                <div class="status-indicator">
+                    <span class="status-dot" id="status-dot"></span>
+                    <span id="status-text">Pr&uuml;fe System...</span>
+                </div>
+                <div class="card-badge" id="throttle-hex">0x0</div>
+            </div>
+        </div>
+
+        <!-- Animation Mode Selection -->
+        <div class="card">
+            <div class="card-header">
+                <span class="card-label">Visualisierung</span>
+                <span class="card-badge" id="mode-badge">Zyklus</span>
+            </div>
+            <div class="segmented-control">
+                <button class="segment-btn active" id="btn-cycle" onclick="setEffect('cycle')">Auto</button>
+                <button class="segment-btn" id="btn-plasma" onclick="setEffect('plasma')">Plasma</button>
+                <button class="segment-btn" id="btn-metaballs" onclick="setEffect('metaballs')">Metaballs</button>
+                <button class="segment-btn" id="btn-waves" onclick="setEffect('waves')">Waves</button>
+            </div>
+        </div>
+
+        <!-- Brightness Slider -->
+        <div class="card">
+            <div class="slider-container">
+                <div class="slider-meta">
+                    <span class="card-label">Helligkeit</span>
+                    <span class="slider-value-display" id="bright-val">65%</span>
+                </div>
+                <input type="range" id="bright-slider" min="5" max="100" value="65"
+                       oninput="onSliderInput(this.value)"
+                       onchange="sendBrightness(this.value)">
+                <div class="preset-row">
+                    <button class="preset-btn" onclick="applyPreset(25)">25%</button>
+                    <button class="preset-btn" onclick="applyPreset(50)">50%</button>
+                    <button class="preset-btn" onclick="applyPreset(75)">75%</button>
+                    <button class="preset-btn" onclick="applyPreset(100)">100%</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Output / Power State -->
+        <div class="card">
+            <div class="toggle-row">
+                <div class="toggle-text">
+                    <span class="toggle-title">Ausgabe</span>
+                    <span class="toggle-subtitle" id="power-subtitle">Matrix aktiv</span>
+                </div>
+                <button class="btn-toggle" id="power-btn" onclick="togglePower()">Aktiv</button>
             </div>
         </div>
     </div>
@@ -237,62 +511,68 @@ HTML_DASHBOARD = """<!DOCTYPE html>
     <script>
         let isDragging = false;
         let isActive = true;
-        let updateTimer = null;
+        let debounceTimer = null;
 
         async function updateStatus() {
             try {
                 const res = await fetch("/api/status");
                 if (!res.ok) return;
                 const data = await res.json();
-                
-                document.getElementById("temp-val").innerText = data.temp + " °C";
-                document.getElementById("fps-val").innerText = Math.round(data.measured_fps) + " FPS";
-                
-                const pill = document.getElementById("status-pill");
-                pill.innerText = data.status_text;
-                pill.style.background = data.status_color + "22";
-                pill.style.color = data.status_color;
-                pill.style.border = "1px solid " + data.status_color + "66";
 
+                document.getElementById("temp-val").textContent = data.temp;
+                document.getElementById("fps-val").textContent = Math.round(data.measured_fps);
+                document.getElementById("uptime-val").textContent = data.uptime;
+                document.getElementById("throttle-hex").textContent = data.throttled_hex;
+
+                // Status text and indicator
+                const statusDot = document.getElementById("status-dot");
+                const statusText = document.getElementById("status-text");
+                statusText.textContent = data.status_text;
+                statusDot.className = "status-dot " + (data.status_level || "ok");
+
+                // Brightness slider update if not dragging
                 if (!isDragging) {
-                    document.getElementById("bright-val").innerText = data.brightness + " %";
+                    document.getElementById("bright-val").textContent = data.brightness + "%";
                     document.getElementById("bright-slider").value = data.brightness;
                 }
 
-                // Badges and buttons
-                document.querySelectorAll(".effect-btn").forEach(b => b.classList.remove("active"));
+                // Effect selection state
+                document.querySelectorAll(".segment-btn").forEach(btn => btn.classList.remove("active"));
                 if (data.mode === "cycle") {
                     document.getElementById("btn-cycle").classList.add("active");
-                    document.getElementById("current-badge").innerText = "Zyklus: " + data.effect.toUpperCase();
-                } else if (document.getElementById("btn-" + data.effect)) {
-                    document.getElementById("btn-" + data.effect).classList.add("active");
-                    document.getElementById("current-badge").innerText = data.effect.toUpperCase();
+                    document.getElementById("mode-badge").textContent = "Auto (" + data.effect + ")";
+                } else {
+                    const btn = document.getElementById("btn-" + data.effect);
+                    if (btn) btn.classList.add("active");
+                    document.getElementById("mode-badge").textContent = data.effect;
                 }
 
-                // Power button
+                // Power state
                 isActive = data.active;
-                const pBtn = document.getElementById("power-btn");
-                const pDesc = document.getElementById("power-desc");
+                const powerBtn = document.getElementById("power-btn");
+                const powerSub = document.getElementById("power-subtitle");
+                const headerDot = document.getElementById("header-dot");
                 if (data.active) {
-                    pBtn.className = "power-btn on";
-                    pBtn.innerHTML = "<span>&#9211;</span> AN";
-                    pDesc.innerText = "Panel aktiv";
+                    powerBtn.className = "btn-toggle";
+                    powerBtn.textContent = "Aktiv";
+                    powerSub.textContent = "Matrix aktiv";
+                    headerDot.style.backgroundColor = "var(--success)";
                 } else {
-                    pBtn.className = "power-btn off";
-                    pBtn.innerHTML = "<span>&#9211;</span> AUS";
-                    pDesc.innerText = "Panel dunkel (Standby)";
+                    powerBtn.className = "btn-toggle state-off";
+                    powerBtn.textContent = "Standby";
+                    powerSub.textContent = "Panel dunkel";
+                    headerDot.style.backgroundColor = "var(--text-tertiary)";
                 }
             } catch (e) {
-                console.error(e);
+                console.error("Telemetry update error:", e);
             }
         }
 
-        function onSliderDrag(val) {
+        function onSliderInput(val) {
             isDragging = true;
-            document.getElementById("bright-val").innerText = val + " %";
-            // Debounced send while dragging
-            clearTimeout(updateTimer);
-            updateTimer = setTimeout(() => sendBrightness(val), 100);
+            document.getElementById("bright-val").textContent = val + "%";
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => sendBrightness(val), 80);
         }
 
         async function sendBrightness(val) {
@@ -306,7 +586,7 @@ HTML_DASHBOARD = """<!DOCTYPE html>
 
         function applyPreset(val) {
             document.getElementById("bright-slider").value = val;
-            document.getElementById("bright-val").innerText = val + " %";
+            document.getElementById("bright-val").textContent = val + "%";
             sendBrightness(val);
         }
 
@@ -344,7 +624,7 @@ class MatrixRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
-        if self.path == "/" or self.path == "/index.html":
+        if self.path in ("/", "/index.html"):
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
@@ -385,7 +665,7 @@ class MatrixRequestHandler(BaseHTTPRequestHandler):
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
-                self.wfile.write(b"{\"status\":\"ok\"}")
+                self.wfile.write(b'{"status":"ok"}')
             except Exception as e:
                 self.send_response(400)
                 self.end_headers()
@@ -395,7 +675,7 @@ class MatrixRequestHandler(BaseHTTPRequestHandler):
             self.end_headers()
 
     def log_message(self, format, *args):
-        pass  # Suppress console spam to keep stdout clean
+        pass
 
 def start_web_server(engine_state, port=80):
     handler = MatrixRequestHandler
