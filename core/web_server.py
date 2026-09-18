@@ -15,7 +15,7 @@ class EngineState:
         self.fps = 50.0
         self.measured_fps = 50.0
         self.active = True
-        self.effects = ["1", "2", "3", "4"]
+        self.effects = ["1", "2", "3", "4", "5"]
         self.cycle_time = 20.0
         self.start_time = time.time()
 
@@ -271,7 +271,7 @@ HTML_DASHBOARD = """<!DOCTYPE html>
         /* Segmented Button Group (Effect Selection) */
         .segmented-control {
             display: grid;
-            grid-template-columns: repeat(5, 1fr);
+            grid-template-columns: repeat(6, 1fr);
             gap: 4px;
             background-color: var(--surface-elevated);
             padding: 3px;
@@ -353,7 +353,7 @@ HTML_DASHBOARD = """<!DOCTYPE html>
         /* Preset Buttons */
         .preset-row {
             display: grid;
-            grid-template-columns: repeat(5, 1fr);
+            grid-template-columns: repeat(6, 1fr);
             gap: 6px;
         }
 
@@ -475,6 +475,7 @@ HTML_DASHBOARD = """<!DOCTYPE html>
                 <button class="segment-btn" id="btn-2" onclick="setEffect('2')">2</button>
                 <button class="segment-btn" id="btn-3" onclick="setEffect('3')">3</button>
                 <button class="segment-btn" id="btn-4" onclick="setEffect('4')">4</button>
+                <button class="segment-btn" id="btn-5" onclick="setEffect('5')">5</button>
             </div>
         </div>
 
