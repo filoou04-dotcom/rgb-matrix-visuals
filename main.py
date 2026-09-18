@@ -69,13 +69,15 @@ def main():
     if args.startup_test:
         run_boot_sequence(driver, MatrixConfig.COLS, MatrixConfig.ROWS)
 
-    # Instantiate visual effects
+    # Instantiate visual effects with numeric identifiers
     effects_map = {
-        "plasma": EFFECTS["plasma"](MatrixConfig.COLS, MatrixConfig.ROWS, palette),
-        "metaballs": EFFECTS["metaballs"](MatrixConfig.COLS, MatrixConfig.ROWS, palette),
-        "waves": EFFECTS["waves"](MatrixConfig.COLS, MatrixConfig.ROWS, palette)
+        "1": EFFECTS["1"](MatrixConfig.COLS, MatrixConfig.ROWS, palette),
+        "2": EFFECTS["2"](MatrixConfig.COLS, MatrixConfig.ROWS, palette),
+        "3": EFFECTS["3"](MatrixConfig.COLS, MatrixConfig.ROWS, palette),
     }
     effects_list = list(effects_map.values())
+    effects_rev_map = {v: k for k, v in effects_map.items()}
+    alias_map = {"plasma": "1", "metaballs": "2", "waves": "3"}
     
     # Initialize Shared Web Engine State
     engine_state = EngineState()
@@ -83,15 +85,18 @@ def main():
     engine_state.fps = args.fps
     engine_state.cycle_time = args.cycle_time
     engine_state.mode = "cycle" if args.effect == "cycle" else "manual"
-    engine_state.current_effect = "plasma" if args.effect == "cycle" else args.effect
-    engine_state.effects = list(effects_map.keys())
+    initial_eff = alias_map.get(args.effect, args.effect)
+    engine_state.current_effect = "1" if args.effect == "cycle" else initial_eff
+    engine_state.effects = ["1", "2", "3"]
 
     # Launch lightweight Web Dashboard in background thread
     start_web_server(engine_state, port=args.port)
 
     effect_idx = 0
     if args.effect != "cycle":
-        effect_idx = [e.name.lower() for e in effects_list].index(EFFECTS[args.effect](1, 1, palette).name.lower())
+        sel = alias_map.get(args.effect, args.effect)
+        if sel in effects_map:
+            effect_idx = list(effects_map.keys()).index(sel)
 
     current_effect = effects_list[effect_idx]
     last_cycle_time = time.perf_counter()
@@ -131,18 +136,21 @@ def main():
             if engine_state.target_effect:
                 target = engine_state.target_effect
                 engine_state.target_effect = None
+                target = alias_map.get(target, target)
                 if target in effects_map:
                     current_effect = effects_map[target]
-                    print(f"[INFO] Web Control: switched effect to {current_effect.name}")
+                    effect_idx = list(effects_map.keys()).index(target)
+                    print(f"[INFO] Web Control: switched to Programm {target}")
 
             # Auto-cycle mode
             if engine_state.mode == "cycle" and (now - last_cycle_time >= engine_state.cycle_time):
                 effect_idx = (effect_idx + 1) % len(effects_list)
                 current_effect = effects_list[effect_idx]
                 last_cycle_time = now
-                print(f"[INFO] Auto-Cycle: switched effect to {current_effect.name}")
+                p_num = effects_rev_map.get(current_effect, str(effect_idx + 1))
+                print(f"[INFO] Auto-Cycle: switched to Programm {p_num}")
 
-            engine_state.current_effect = current_effect.name.replace("Fluid", "").replace("Liquid", "").lower()
+            engine_state.current_effect = effects_rev_map.get(current_effect, "1")
 
             # Update simulation & render frame
             current_effect.update(dt)

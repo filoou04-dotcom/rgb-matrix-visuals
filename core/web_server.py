@@ -8,14 +8,14 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 class EngineState:
     def __init__(self):
         self.lock = threading.Lock()
-        self.current_effect = "plasma"
+        self.current_effect = "1"
         self.mode = "cycle"
         self.target_effect = None
         self.brightness = 65
         self.fps = 50.0
         self.measured_fps = 50.0
         self.active = True
-        self.effects = ["plasma", "metaballs", "waves"]
+        self.effects = ["1", "2", "3"]
         self.cycle_time = 20.0
         self.start_time = time.time()
 
@@ -466,14 +466,14 @@ HTML_DASHBOARD = """<!DOCTYPE html>
         <!-- Animation Mode Selection -->
         <div class="card">
             <div class="card-header">
-                <span class="card-label">Visualisierung</span>
+                <span class="card-label">Programm</span>
                 <span class="card-badge" id="mode-badge">Zyklus</span>
             </div>
             <div class="segmented-control">
                 <button class="segment-btn active" id="btn-cycle" onclick="setEffect('cycle')">Auto</button>
-                <button class="segment-btn" id="btn-plasma" onclick="setEffect('plasma')">Plasma</button>
-                <button class="segment-btn" id="btn-metaballs" onclick="setEffect('metaballs')">Metaballs</button>
-                <button class="segment-btn" id="btn-waves" onclick="setEffect('waves')">Waves</button>
+                <button class="segment-btn" id="btn-1" onclick="setEffect('1')">1</button>
+                <button class="segment-btn" id="btn-2" onclick="setEffect('2')">2</button>
+                <button class="segment-btn" id="btn-3" onclick="setEffect('3')">3</button>
             </div>
         </div>
 
@@ -544,7 +544,7 @@ HTML_DASHBOARD = """<!DOCTYPE html>
                 } else {
                     const btn = document.getElementById("btn-" + data.effect);
                     if (btn) btn.classList.add("active");
-                    document.getElementById("mode-badge").textContent = data.effect;
+                    document.getElementById("mode-badge").textContent = "Programm " + data.effect;
                 }
 
                 // Power state
