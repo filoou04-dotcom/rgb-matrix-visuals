@@ -79,7 +79,7 @@ def main():
     }
     effects_list = list(effects_map.values())
     effects_rev_map = {v: k for k, v in effects_map.items()}
-    alias_map = {"plasma": "1", "metaballs": "2", "waves": "3", "walker": "4", "thermal": "5"}
+    alias_map = {"plasma": "1", "metaballs": "2", "waves": "3", "walker": "4", "eye": "5", "neon_eye": "5", "5": "5"}
     
     # Initialize Shared Web Engine State
     engine_state = EngineState()
