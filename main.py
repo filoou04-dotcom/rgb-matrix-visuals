@@ -74,10 +74,11 @@ def main():
         "1": EFFECTS["1"](MatrixConfig.COLS, MatrixConfig.ROWS, palette),
         "2": EFFECTS["2"](MatrixConfig.COLS, MatrixConfig.ROWS, palette),
         "3": EFFECTS["3"](MatrixConfig.COLS, MatrixConfig.ROWS, palette),
+        "4": EFFECTS["4"](MatrixConfig.COLS, MatrixConfig.ROWS, palette),
     }
     effects_list = list(effects_map.values())
     effects_rev_map = {v: k for k, v in effects_map.items()}
-    alias_map = {"plasma": "1", "metaballs": "2", "waves": "3"}
+    alias_map = {"plasma": "1", "metaballs": "2", "waves": "3", "walker": "4"}
     
     # Initialize Shared Web Engine State
     engine_state = EngineState()
@@ -87,7 +88,7 @@ def main():
     engine_state.mode = "cycle" if args.effect == "cycle" else "manual"
     initial_eff = alias_map.get(args.effect, args.effect)
     engine_state.current_effect = "1" if args.effect == "cycle" else initial_eff
-    engine_state.effects = ["1", "2", "3"]
+    engine_state.effects = ["1", "2", "3", "4"]
 
     # Launch lightweight Web Dashboard in background thread
     start_web_server(engine_state, port=args.port)
