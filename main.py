@@ -69,13 +69,13 @@ def main():
     if args.startup_test:
         run_boot_sequence(driver, MatrixConfig.COLS, MatrixConfig.ROWS)
 
-    # Instantiate visual effects dynamically
+    # Instantiate visual effects
     effects_map = {
-        name: cls(MatrixConfig.COLS, MatrixConfig.ROWS, palette)
-        for name, cls in EFFECTS.items()
+        "plasma": EFFECTS["plasma"](MatrixConfig.COLS, MatrixConfig.ROWS, palette),
+        "metaballs": EFFECTS["metaballs"](MatrixConfig.COLS, MatrixConfig.ROWS, palette),
+        "waves": EFFECTS["waves"](MatrixConfig.COLS, MatrixConfig.ROWS, palette)
     }
     effects_list = list(effects_map.values())
-    effects_rev_map = {v: k for k, v in effects_map.items()}
     
     # Initialize Shared Web Engine State
     engine_state = EngineState()
@@ -83,15 +83,15 @@ def main():
     engine_state.fps = args.fps
     engine_state.cycle_time = args.cycle_time
     engine_state.mode = "cycle" if args.effect == "cycle" else "manual"
-    engine_state.current_effect = "minimal" if args.effect == "cycle" else args.effect
+    engine_state.current_effect = "plasma" if args.effect == "cycle" else args.effect
     engine_state.effects = list(effects_map.keys())
 
     # Launch lightweight Web Dashboard in background thread
     start_web_server(engine_state, port=args.port)
 
     effect_idx = 0
-    if args.effect != "cycle" and args.effect in effects_map:
-        effect_idx = list(effects_map.keys()).index(args.effect)
+    if args.effect != "cycle":
+        effect_idx = [e.name.lower() for e in effects_list].index(EFFECTS[args.effect](1, 1, palette).name.lower())
 
     current_effect = effects_list[effect_idx]
     last_cycle_time = time.perf_counter()
@@ -142,7 +142,7 @@ def main():
                 last_cycle_time = now
                 print(f"[INFO] Auto-Cycle: switched effect to {current_effect.name}")
 
-            engine_state.current_effect = effects_rev_map.get(current_effect, "minimal")
+            engine_state.current_effect = current_effect.name.replace("Fluid", "").replace("Liquid", "").lower()
 
             # Update simulation & render frame
             current_effect.update(dt)

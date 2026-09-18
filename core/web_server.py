@@ -15,7 +15,7 @@ class EngineState:
         self.fps = 50.0
         self.measured_fps = 50.0
         self.active = True
-        self.effects = ["minimal", "plasma", "metaballs", "waves"]
+        self.effects = ["plasma", "metaballs", "waves"]
         self.cycle_time = 20.0
         self.start_time = time.time()
 
@@ -271,7 +271,7 @@ HTML_DASHBOARD = """<!DOCTYPE html>
         /* Segmented Button Group (Effect Selection) */
         .segmented-control {
             display: grid;
-            grid-template-columns: repeat(5, 1fr);
+            grid-template-columns: repeat(4, 1fr);
             gap: 4px;
             background-color: var(--surface-elevated);
             padding: 3px;
@@ -353,7 +353,7 @@ HTML_DASHBOARD = """<!DOCTYPE html>
         /* Preset Buttons */
         .preset-row {
             display: grid;
-            grid-template-columns: repeat(5, 1fr);
+            grid-template-columns: repeat(4, 1fr);
             gap: 6px;
         }
 
@@ -471,7 +471,6 @@ HTML_DASHBOARD = """<!DOCTYPE html>
             </div>
             <div class="segmented-control">
                 <button class="segment-btn active" id="btn-cycle" onclick="setEffect('cycle')">Auto</button>
-                <button class="segment-btn" id="btn-minimal" onclick="setEffect('minimal')">Minimal</button>
                 <button class="segment-btn" id="btn-plasma" onclick="setEffect('plasma')">Plasma</button>
                 <button class="segment-btn" id="btn-metaballs" onclick="setEffect('metaballs')">Metaballs</button>
                 <button class="segment-btn" id="btn-waves" onclick="setEffect('waves')">Waves</button>
