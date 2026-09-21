@@ -5,6 +5,7 @@ from .silhouette_walker import SilhouetteWalker
 from .neon_eye import NeonEye
 from .mainz_livecam import MainzLiveCam
 from .star_chaos import StarChaos
+from .lava_lamp import LavaLamp
 
 EFFECTS = {
     "1": FluidPlasma,
@@ -14,6 +15,7 @@ EFFECTS = {
     "5": NeonEye,
     "6": MainzLiveCam,
     "7": StarChaos,
+    "8": LavaLamp,
     "plasma": FluidPlasma,
     "metaballs": LiquidMetaballs,
     "waves": FluidWaves,
@@ -24,4 +26,6 @@ EFFECTS = {
     "mainz": MainzLiveCam,
     "star": StarChaos,
     "star_chaos": StarChaos,
+    "lavalamp": LavaLamp,
+    "lava": LavaLamp,
 }

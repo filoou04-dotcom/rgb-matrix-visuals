@@ -78,10 +78,11 @@ def main():
         "5": EFFECTS["5"](MatrixConfig.COLS, MatrixConfig.ROWS, palette),
         "6": EFFECTS["6"](MatrixConfig.COLS, MatrixConfig.ROWS, palette),
         "7": EFFECTS["7"](MatrixConfig.COLS, MatrixConfig.ROWS, palette),
+        "8": EFFECTS["8"](MatrixConfig.COLS, MatrixConfig.ROWS, palette),
     }
     effects_list = list(effects_map.values())
     effects_rev_map = {v: k for k, v in effects_map.items()}
-    alias_map = {"plasma": "1", "metaballs": "2", "waves": "3", "walker": "4", "eye": "5", "neon_eye": "5", "5": "5", "livecam": "6", "mainz": "6", "cam": "6", "6": "6", "star": "7", "star_chaos": "7", "7": "7"}
+    alias_map = {"plasma": "1", "metaballs": "2", "waves": "3", "walker": "4", "eye": "5", "neon_eye": "5", "5": "5", "livecam": "6", "mainz": "6", "cam": "6", "6": "6", "star": "7", "star_chaos": "7", "7": "7", "lavalamp": "8", "lava": "8", "8": "8"}
     
     # Initialize Shared Web Engine State
     engine_state = EngineState()
@@ -91,7 +92,7 @@ def main():
     engine_state.mode = "cycle" if args.effect == "cycle" else "manual"
     initial_eff = alias_map.get(args.effect, args.effect)
     engine_state.current_effect = "1" if args.effect == "cycle" else initial_eff
-    engine_state.effects = ["1", "2", "3", "4", "5", "6", "7"]
+    engine_state.effects = ["1", "2", "3", "4", "5", "6", "7", "8"]
 
     # Launch lightweight Web Dashboard in background thread
     start_web_server(engine_state, port=args.port)
@@ -143,6 +144,8 @@ def main():
                 target = alias_map.get(target, target)
                 if target in effects_map:
                     current_effect = effects_map[target]
+                    if hasattr(current_effect, "reset"):
+                        current_effect.reset()
                     effect_idx = list(effects_map.keys()).index(target)
                     print(f"[INFO] Web Control: switched to Programm {target}")
 
@@ -150,6 +153,8 @@ def main():
             if engine_state.mode == "cycle" and (now - last_cycle_time >= engine_state.cycle_time):
                 effect_idx = (effect_idx + 1) % len(effects_list)
                 current_effect = effects_list[effect_idx]
+                if hasattr(current_effect, "reset"):
+                    current_effect.reset()
                 last_cycle_time = now
                 p_num = effects_rev_map.get(current_effect, str(effect_idx + 1))
                 print(f"[INFO] Auto-Cycle: switched to Programm {p_num}")
