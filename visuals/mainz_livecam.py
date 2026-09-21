@@ -195,18 +195,19 @@ class MainzLiveCam(VisualEffect):
                 m *= decay
 
     def _draw_badge(self, buf, text, opacity):
-        if opacity <= 0.01:
+        if opacity <= 0.02:
             return
+        bg_alpha = 0.65 * opacity
+        buf[1:8, 1:14] = (buf[1:8, 1:14] * (1.0 - bg_alpha)).astype(np.uint8)
         cur_x = 2
         y0 = 2
+        col = int(255 * opacity)
         for ch in text:
             if ch in FONT_5X3:
                 grid = FONT_5X3[ch]
                 for r in range(5):
                     for c in range(3):
                         if grid[r][c]:
-                            buf[min(31, y0 + r + 1), min(63, cur_x + c + 1)] = [0, 0, 0]
-                            col = int(255 * opacity)
                             buf[y0 + r, cur_x + c] = [col, col, col]
                 cur_x += 4
 
