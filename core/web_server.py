@@ -477,6 +477,7 @@ HTML_DASHBOARD = """<!DOCTYPE html>
                 <button class="segment-btn" id="btn-4" onclick="setEffect('4')">4</button>
                 <button class="segment-btn" id="btn-5" onclick="setEffect('5')">5</button>
                 <button class="segment-btn" id="btn-6" onclick="setEffect('6')">6</button>
+                <button class="segment-btn" id="btn-7" onclick="setEffect('7')">7</button>
             </div>
         </div>
 
