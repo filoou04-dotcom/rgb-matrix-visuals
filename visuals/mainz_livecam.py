@@ -85,7 +85,10 @@ class LiveCamWorker(threading.Thread):
         return np.array(enhanced, dtype=np.uint8)
 
     def run(self):
-        os.makedirs(CACHE_DIR, exist_ok=True)
+        try:
+            os.makedirs(CACHE_DIR, exist_ok=True)
+        except Exception as e:
+            logger.debug(f"Cache dir warning: {e}")
         time.sleep(2.0)
 
         while self.running:
