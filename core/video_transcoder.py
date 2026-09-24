@@ -8,6 +8,7 @@ import numpy as np
 
 MEDIA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "media", "videos"))
 ACTIVE_FILE = os.path.join(MEDIA_DIR, "active.json")
+SETTINGS_FILE = os.path.join(MEDIA_DIR, "settings.json")
 YT_DLP_PATH = "/home/mini/.local/bin/yt-dlp"
 
 def sanitize_id(title):
@@ -18,39 +19,113 @@ class VideoManager:
     def __init__(self, media_dir=MEDIA_DIR):
         self.media_dir = media_dir
         os.makedirs(self.media_dir, exist_ok=True)
+        self.settings_file = os.path.join(self.media_dir, "settings.json")
+        self.active_file = os.path.join(self.media_dir, "active.json")
+        self._ensure_settings()
 
-    def get_active_id(self):
-        if os.path.exists(ACTIVE_FILE):
+    def _ensure_settings(self):
+        if not os.path.exists(self.settings_file):
+            active_id = None
+            if os.path.exists(self.active_file):
+                try:
+                    with open(self.active_file, "r") as f:
+                        active_id = json.load(f).get("active_id")
+                except Exception:
+                    pass
+            if not active_id:
+                videos = self.list_videos()
+                if videos:
+                    active_id = videos[0]["id"]
+
+            default_settings = {
+                "active_id": active_id,
+                "playback_mode": "playlist",
+                "crossfade_sec": 1.8
+            }
             try:
-                with open(ACTIVE_FILE, "r") as f:
-                    data = json.load(f)
-                    return data.get("active_id")
+                with open(self.settings_file, "w") as f:
+                    json.dump(default_settings, f, indent=2)
             except Exception:
                 pass
+
+    def get_settings(self):
+        self._ensure_settings()
+        try:
+            with open(self.settings_file, "r") as f:
+                data = json.load(f)
+                return {
+                    "active_id": data.get("active_id"),
+                    "playback_mode": data.get("playback_mode", "playlist"),
+                    "crossfade_sec": float(data.get("crossfade_sec", 1.8))
+                }
+        except Exception:
+            return {
+                "active_id": None,
+                "playback_mode": "playlist",
+                "crossfade_sec": 1.8
+            }
+
+    def update_settings(self, active_id=None, playback_mode=None, crossfade_sec=None):
+        settings = self.get_settings()
+        if active_id is not None:
+            settings["active_id"] = active_id
+        if playback_mode is not None:
+            if playback_mode in ("playlist", "loop"):
+                settings["playback_mode"] = playback_mode
+        if crossfade_sec is not None:
+            try:
+                settings["crossfade_sec"] = max(0.5, min(5.0, float(crossfade_sec)))
+            except (ValueError, TypeError):
+                pass
+
+        try:
+            with open(self.settings_file, "w") as f:
+                json.dump(settings, f, indent=2)
+            # Maintain active.json for backwards compatibility
+            if settings.get("active_id"):
+                with open(self.active_file, "w") as f:
+                    json.dump({"active_id": settings["active_id"]}, f, indent=2)
+        except Exception as e:
+            print(f"[WARN] Failed to write settings: {e}")
+        return settings
+
+    def get_active_id(self):
+        settings = self.get_settings()
+        active_id = settings.get("active_id")
+        if active_id:
+            npy_path = os.path.join(self.media_dir, f"{active_id}.npy")
+            if os.path.exists(npy_path):
+                return active_id
         videos = self.list_videos()
         if videos:
-            return videos[0]["id"]
+            first_id = videos[0]["id"]
+            self.set_active_id(first_id)
+            return first_id
         return None
 
     def set_active_id(self, video_id):
-        with open(ACTIVE_FILE, "w") as f:
-            json.dump({"active_id": video_id}, f, indent=2)
+        self.update_settings(active_id=video_id)
+
+    def get_next_playlist_id(self, current_id):
+        videos = self.list_videos()
+        if not videos:
+            return None
+        ids = [v["id"] for v in videos]
+        if current_id in ids:
+            curr_idx = ids.index(current_id)
+            next_idx = (curr_idx + 1) % len(ids)
+            return ids[next_idx]
+        return ids[0]
 
     def list_videos(self):
         videos = []
-        active_id = None
-        if os.path.exists(ACTIVE_FILE):
-            try:
-                with open(ACTIVE_FILE, "r") as f:
-                    active_id = json.load(f).get("active_id")
-            except Exception:
-                pass
+        active_id = self.get_settings().get("active_id")
 
         if not os.path.exists(self.media_dir):
             return videos
 
         for fname in os.listdir(self.media_dir):
-            if fname.endswith(".json") and fname != "active.json":
+            if fname.endswith(".json") and fname not in ("active.json", "settings.json"):
                 json_path = os.path.join(self.media_dir, fname)
                 try:
                     with open(json_path, "r") as f:
@@ -64,7 +139,7 @@ class VideoManager:
                 except Exception as e:
                     print(f"[WARN] Error reading metadata {fname}: {e}")
 
-        videos.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+        videos.sort(key=lambda x: x.get("created_at", ""), reverse=False)
         return videos
 
     def delete_video(self, video_id):
@@ -76,13 +151,18 @@ class VideoManager:
                 except Exception as e:
                     print(f"[WARN] Failed to remove {path}: {e}")
 
-        if self.get_active_id() == video_id:
+        settings = self.get_settings()
+        if settings.get("active_id") == video_id:
             remaining = self.list_videos()
             if remaining:
                 self.set_active_id(remaining[0]["id"])
             else:
-                if os.path.exists(ACTIVE_FILE):
-                    os.remove(ACTIVE_FILE)
+                self.update_settings(active_id=None)
+                if os.path.exists(self.active_file):
+                    try:
+                        os.remove(self.active_file)
+                    except Exception:
+                        pass
         return True
 
     def transcode_file(self, input_file, video_id=None, title=None, aspect_mode="fill", target_fps=25, width=64, height=32):

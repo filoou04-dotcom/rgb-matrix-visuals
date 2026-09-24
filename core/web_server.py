@@ -521,7 +521,7 @@ HTML_DASHBOARD = """<!DOCTYPE html>
             </div>
 
             <!-- Upload File & Mode -->
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:8px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:8px;">
                 <label class="btn-toggle" style="cursor:pointer; display:inline-block; font-size:11px; padding:6px 10px;">
                     Datei hochladen (MP4, GIF)
                     <input type="file" id="video-file-input" accept="video/*,image/gif" style="display:none;" onchange="uploadVideoFile(this)">
@@ -531,6 +531,27 @@ HTML_DASHBOARD = """<!DOCTYPE html>
                     <select id="video-aspect-select" style="background:var(--surface-elevated); border:1px solid var(--border); color:var(--text-primary); font-size:11px; padding:4px 6px; border-radius:4px;">
                         <option value="fill">Fill (Zuschnitt)</option>
                         <option value="fit">Fit (Letterbox)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Playback Mode & Smooth Transition Controls -->
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:8px; background:var(--surface-elevated); padding:8px 10px; border-radius:4px; border:1px solid var(--border);">
+                <div style="font-size:11px; color:var(--text-secondary); display:flex; gap:6px; align-items:center;">
+                    <span>Wiedergabe:</span>
+                    <select id="video-mode-select" onchange="updateVideoSettings()" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary); font-size:11px; padding:3px 6px; border-radius:3px;">
+                        <option value="playlist">Playlist (Alle Videos)</option>
+                        <option value="loop">Einzelloop (1 Video)</option>
+                    </select>
+                </div>
+                <div style="font-size:11px; color:var(--text-secondary); display:flex; gap:6px; align-items:center;">
+                    <span>&Uuml;berblendung:</span>
+                    <select id="video-crossfade-select" onchange="updateVideoSettings()" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary); font-size:11px; padding:3px 6px; border-radius:3px;">
+                        <option value="1.0">1.0 s</option>
+                        <option value="1.5">1.5 s</option>
+                        <option value="1.8" selected>1.8 s</option>
+                        <option value="2.0">2.0 s</option>
+                        <option value="2.5">2.5 s</option>
                     </select>
                 </div>
             </div>
@@ -690,6 +711,19 @@ HTML_DASHBOARD = """<!DOCTYPE html>
 
                 badgeEl.textContent = data.videos.length + " Video" + (data.videos.length === 1 ? "" : "s");
 
+                // Sync playback settings if not actively being changed
+                if (data.settings) {
+                    const modeSel = document.getElementById("video-mode-select");
+                    const xfadeSel = document.getElementById("video-crossfade-select");
+                    if (modeSel && document.activeElement !== modeSel) {
+                        modeSel.value = data.settings.playback_mode || "playlist";
+                    }
+                    if (xfadeSel && document.activeElement !== xfadeSel) {
+                        const val = parseFloat(data.settings.crossfade_sec || 1.8).toFixed(1);
+                        xfadeSel.value = val;
+                    }
+                }
+
                 if (data.videos.length === 0) {
                     listEl.innerHTML = '<div style="font-size:11px; color:var(--text-tertiary); padding:6px 0;">Keine Videos vorhanden.</div>';
                     return;
@@ -721,6 +755,16 @@ HTML_DASHBOARD = """<!DOCTYPE html>
             } catch (e) {
                 console.error("Error loading videos:", e);
             }
+        }
+
+        async function updateVideoSettings() {
+            const mode = document.getElementById("video-mode-select").value;
+            const xfade = parseFloat(document.getElementById("video-crossfade-select").value);
+            await fetch("/api/videos/settings", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ playback_mode: mode, crossfade_sec: xfade })
+            });
         }
 
         async function submitVideoUrl() {
@@ -808,9 +852,11 @@ class MatrixRequestHandler(BaseHTTPRequestHandler):
         elif self.path == "/api/videos":
             videos = self.state.vm.list_videos()
             active = self.state.vm.get_active_id()
+            settings = self.state.vm.get_settings()
             payload = {
                 "videos": videos,
                 "active": active,
+                "settings": settings,
                 "status": self.state.transcode_status
             }
             self.send_response(200)
@@ -854,6 +900,23 @@ class MatrixRequestHandler(BaseHTTPRequestHandler):
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
                 self.wfile.write(b'{"status":"ok"}')
+            except Exception as e:
+                self.send_response(400)
+                self.end_headers()
+                self.wfile.write(str(e).encode("utf-8"))
+        elif self.path == "/api/videos/settings":
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length)
+            try:
+                data = json.loads(body.decode("utf-8"))
+                new_settings = self.state.vm.update_settings(
+                    playback_mode=data.get("playback_mode"),
+                    crossfade_sec=data.get("crossfade_sec")
+                )
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "ok", "settings": new_settings}).encode("utf-8"))
             except Exception as e:
                 self.send_response(400)
                 self.end_headers()
