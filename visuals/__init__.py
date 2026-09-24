@@ -6,6 +6,7 @@ from .neon_eye import NeonEye
 from .mainz_livecam import MainzLiveCam
 from .star_chaos import StarChaos
 from .lava_lamp import LavaLamp
+from .video_player import VideoPlayer
 
 EFFECTS = {
     "1": FluidPlasma,
@@ -16,6 +17,7 @@ EFFECTS = {
     "6": MainzLiveCam,
     "7": StarChaos,
     "8": LavaLamp,
+    "9": VideoPlayer,
     "plasma": FluidPlasma,
     "metaballs": LiquidMetaballs,
     "waves": FluidWaves,
@@ -28,4 +30,6 @@ EFFECTS = {
     "star_chaos": StarChaos,
     "lavalamp": LavaLamp,
     "lava": LavaLamp,
+    "video": VideoPlayer,
+    "player": VideoPlayer,
 }

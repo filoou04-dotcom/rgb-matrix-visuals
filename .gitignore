@@ -9,3 +9,7 @@ venv/
 *.swo
 .DS_Store
 assets/cam_cache/
+media/videos/*.npy
+media/videos/*.mp4
+media/videos/*.webm
+media/videos/*.mkv

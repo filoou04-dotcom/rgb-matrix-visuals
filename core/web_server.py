@@ -3,7 +3,9 @@ import os
 import time
 import socket
 import threading
+import urllib.parse
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from core.video_transcoder import VideoManager
 
 class EngineState:
     def __init__(self):
@@ -15,9 +17,11 @@ class EngineState:
         self.fps = 50.0
         self.measured_fps = 50.0
         self.active = True
-        self.effects = ["1", "2", "3", "4", "5"]
+        self.effects = ["1", "2", "3", "4", "5", "6", "7", "8", "9"]
         self.cycle_time = 20.0
         self.start_time = time.time()
+        self.vm = VideoManager()
+        self.transcode_status = {"busy": False, "msg": "", "error": None}
 
     def set_effect(self, effect_name):
         with self.lock:
@@ -271,7 +275,7 @@ HTML_DASHBOARD = """<!DOCTYPE html>
         /* Segmented Button Group (Effect Selection) */
         .segmented-control {
             display: grid;
-            grid-template-columns: repeat(6, 1fr);
+            grid-template-columns: repeat(5, 1fr);
             gap: 4px;
             background-color: var(--surface-elevated);
             padding: 3px;
@@ -353,7 +357,7 @@ HTML_DASHBOARD = """<!DOCTYPE html>
         /* Preset Buttons */
         .preset-row {
             display: grid;
-            grid-template-columns: repeat(6, 1fr);
+            grid-template-columns: repeat(5, 1fr);
             gap: 6px;
         }
 
@@ -479,6 +483,7 @@ HTML_DASHBOARD = """<!DOCTYPE html>
                 <button class="segment-btn" id="btn-6" onclick="setEffect('6')">6</button>
                 <button class="segment-btn" id="btn-7" onclick="setEffect('7')">7</button>
                 <button class="segment-btn" id="btn-8" onclick="setEffect('8')">8</button>
+                <button class="segment-btn" id="btn-9" onclick="setEffect('9')">9</button>
             </div>
         </div>
 
@@ -498,6 +503,45 @@ HTML_DASHBOARD = """<!DOCTYPE html>
                     <button class="preset-btn" onclick="applyPreset(75)">75%</button>
                     <button class="preset-btn" onclick="applyPreset(100)">100%</button>
                 </div>
+            </div>
+        </div>
+
+        <!-- Programm 9 Video Manager -->
+        <div class="card">
+            <div class="card-header">
+                <span class="card-label">Programm 9: Video Player</span>
+                <span class="card-badge" id="video-count-badge">0 Videos</span>
+            </div>
+
+            <!-- URL Input -->
+            <div style="display:flex; gap:8px; margin-bottom:12px;">
+                <input type="text" id="video-url-input" placeholder="YouTube oder Video-URL einfügen..."
+                       style="flex:1; background:var(--surface-elevated); border:1px solid var(--border); color:var(--text-primary); padding:7px 10px; border-radius:4px; font-size:12px; font-family:var(--font-sans);">
+                <button class="btn-toggle" id="btn-load-url" onclick="submitVideoUrl()">Laden</button>
+            </div>
+
+            <!-- Upload File & Mode -->
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:8px;">
+                <label class="btn-toggle" style="cursor:pointer; display:inline-block; font-size:11px; padding:6px 10px;">
+                    Datei hochladen (MP4, GIF)
+                    <input type="file" id="video-file-input" accept="video/*,image/gif" style="display:none;" onchange="uploadVideoFile(this)">
+                </label>
+                <div style="font-size:11px; color:var(--text-secondary); display:flex; gap:6px; align-items:center;">
+                    <span>Format:</span>
+                    <select id="video-aspect-select" style="background:var(--surface-elevated); border:1px solid var(--border); color:var(--text-primary); font-size:11px; padding:4px 6px; border-radius:4px;">
+                        <option value="fill">Fill (Zuschnitt)</option>
+                        <option value="fit">Fit (Letterbox)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Status Banner -->
+            <div id="video-status-box" style="display:none; font-size:11px; padding:8px 10px; border-radius:4px; margin-bottom:10px; border:1px solid var(--border); background:var(--surface-elevated);">
+                <span id="video-status-msg"></span>
+            </div>
+
+            <!-- Video List -->
+            <div id="video-list-container" style="display:flex; flex-direction:column; gap:6px;">
             </div>
         </div>
 
@@ -613,8 +657,135 @@ HTML_DASHBOARD = """<!DOCTYPE html>
             updateStatus();
         }
 
+        async function loadVideos() {
+            try {
+                const res = await fetch("/api/videos");
+                if (!res.ok) return;
+                const data = await res.json();
+
+                const listEl = document.getElementById("video-list-container");
+                const badgeEl = document.getElementById("video-count-badge");
+                const statusBox = document.getElementById("video-status-box");
+                const statusMsg = document.getElementById("video-status-msg");
+
+                if (data.status && data.status.busy) {
+                    statusBox.style.display = "block";
+                    statusBox.style.borderColor = "var(--border-hover)";
+                    statusMsg.textContent = data.status.msg || "Verarbeite Video...";
+                    document.getElementById("btn-load-url").disabled = true;
+                } else if (data.status && data.status.error) {
+                    statusBox.style.display = "block";
+                    statusBox.style.borderColor = "var(--error)";
+                    statusMsg.textContent = "Fehler: " + data.status.error;
+                    document.getElementById("btn-load-url").disabled = false;
+                } else if (data.status && data.status.msg) {
+                    statusBox.style.display = "block";
+                    statusBox.style.borderColor = "var(--success)";
+                    statusMsg.textContent = data.status.msg;
+                    document.getElementById("btn-load-url").disabled = false;
+                } else {
+                    statusBox.style.display = "none";
+                    document.getElementById("btn-load-url").disabled = false;
+                }
+
+                badgeEl.textContent = data.videos.length + " Video" + (data.videos.length === 1 ? "" : "s");
+
+                if (data.videos.length === 0) {
+                    listEl.innerHTML = '<div style="font-size:11px; color:var(--text-tertiary); padding:6px 0;">Keine Videos vorhanden.</div>';
+                    return;
+                }
+
+                let html = "";
+                data.videos.forEach(v => {
+                    const isActive = v.id === data.active;
+                    const borderCol = isActive ? "var(--border-hover)" : "var(--border)";
+                    const bgCol = isActive ? "rgba(255,255,255,0.03)" : "var(--surface-elevated)";
+                    html += `
+                        <div style="display:flex; justify-content:space-between; align-items:center; background:${bgCol}; border:1px solid ${borderCol}; padding:8px 10px; border-radius:4px; gap:8px;">
+                            <div style="flex:1; min-width:0;">
+                                <div style="font-size:12px; font-weight:500; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                                    ${isActive ? '<span style="color:var(--success); margin-right:4px;">[Aktiv] </span>' : ''}${v.title || v.id}
+                                </div>
+                                <div style="font-size:10px; color:var(--text-tertiary); font-family:var(--font-mono); margin-top:2px;">
+                                    ${v.duration}s | ${v.fps} FPS | ${v.file_size_mb || 0} MB | ${v.aspect_mode}
+                                </div>
+                            </div>
+                            <div style="display:flex; gap:6px;">
+                                ${!isActive ? `<button class="preset-btn" style="padding:4px 8px;" onclick="selectVideo('${v.id}')">Abspielen</button>` : '<span style="font-size:11px; color:var(--success); font-weight:600; padding:4px 6px;">Aktiv</span>'}
+                                <button class="preset-btn" style="padding:4px 8px; color:var(--error);" onclick="deleteVideo('${v.id}')">Löschen</button>
+                            </div>
+                        </div>
+                    `;
+                });
+                listEl.innerHTML = html;
+            } catch (e) {
+                console.error("Error loading videos:", e);
+            }
+        }
+
+        async function submitVideoUrl() {
+            const input = document.getElementById("video-url-input");
+            const aspect = document.getElementById("video-aspect-select").value;
+            const url = input.value.trim();
+            if (!url) return;
+            input.value = "";
+
+            const statusBox = document.getElementById("video-status-box");
+            const statusMsg = document.getElementById("video-status-msg");
+            statusBox.style.display = "block";
+            statusMsg.textContent = "Starte Download & Umrechnung...";
+
+            await fetch("/api/videos/url", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ url: url, aspect_mode: aspect })
+            });
+            setTimeout(loadVideos, 500);
+        }
+
+        async function uploadVideoFile(fileInput) {
+            const file = fileInput.files[0];
+            if (!file) return;
+            const aspect = document.getElementById("video-aspect-select").value;
+
+            const statusBox = document.getElementById("video-status-box");
+            const statusMsg = document.getElementById("video-status-msg");
+            statusBox.style.display = "block";
+            statusMsg.textContent = "Lade Datei hoch: " + file.name + "...";
+
+            const url = `/api/videos/upload?filename=${encodeURIComponent(file.name)}&aspect_mode=${encodeURIComponent(aspect)}`;
+            await fetch(url, {
+                method: "POST",
+                body: file
+            });
+            fileInput.value = "";
+            setTimeout(loadVideos, 500);
+        }
+
+        async function selectVideo(id) {
+            await fetch("/api/videos/select", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id: id })
+            });
+            updateStatus();
+            loadVideos();
+        }
+
+        async function deleteVideo(id) {
+            if (!confirm("Video wirklich löschen?")) return;
+            await fetch("/api/videos/delete", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id: id })
+            });
+            loadVideos();
+        }
+
         setInterval(updateStatus, 1500);
+        setInterval(loadVideos, 3000);
         updateStatus();
+        loadVideos();
     </script>
 </body>
 </html>
@@ -634,6 +805,18 @@ class MatrixRequestHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
             self.wfile.write(HTML_DASHBOARD.encode("utf-8"))
+        elif self.path == "/api/videos":
+            videos = self.state.vm.list_videos()
+            active = self.state.vm.get_active_id()
+            payload = {
+                "videos": videos,
+                "active": active,
+                "status": self.state.transcode_status
+            }
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps(payload).encode("utf-8"))
         elif self.path == "/api/status":
             stats = self.state.get_hardware_stats()
             with self.state.lock:
@@ -675,6 +858,130 @@ class MatrixRequestHandler(BaseHTTPRequestHandler):
                 self.send_response(400)
                 self.end_headers()
                 self.wfile.write(str(e).encode("utf-8"))
+        elif self.path == "/api/videos/select":
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length)
+            try:
+                data = json.loads(body.decode("utf-8"))
+                vid_id = data.get("id")
+                if vid_id:
+                    self.state.vm.set_active_id(vid_id)
+                    self.state.set_effect("9")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"status":"ok"}')
+            except Exception as e:
+                self.send_response(400)
+                self.end_headers()
+                self.wfile.write(str(e).encode("utf-8"))
+        elif self.path == "/api/videos/delete":
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length)
+            try:
+                data = json.loads(body.decode("utf-8"))
+                vid_id = data.get("id")
+                if vid_id:
+                    self.state.vm.delete_video(vid_id)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"status":"ok"}')
+            except Exception as e:
+                self.send_response(400)
+                self.end_headers()
+                self.wfile.write(str(e).encode("utf-8"))
+        elif self.path == "/api/videos/url":
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length)
+            try:
+                data = json.loads(body.decode("utf-8"))
+                url = data.get("url")
+                aspect = data.get("aspect_mode", "fill")
+                if not url:
+                    self.send_response(400)
+                    self.end_headers()
+                    self.wfile.write(b'{"error":"URL missing"}')
+                    return
+
+                if self.state.transcode_status.get("busy"):
+                    self.send_response(409)
+                    self.end_headers()
+                    self.wfile.write(b'{"error":"Transkodierung laeuft bereits"}')
+                    return
+
+                def bg_dl():
+                    self.state.transcode_status = {"busy": True, "msg": "Lade Video herunter & transkodiere...", "error": None}
+                    try:
+                        meta = self.state.vm.download_and_transcode_url(url, aspect_mode=aspect)
+                        self.state.set_effect("9")
+                        self.state.transcode_status = {"busy": False, "msg": f"Fertig: {meta.get('title', '')}", "error": None}
+                    except Exception as err:
+                        self.state.transcode_status = {"busy": False, "msg": "", "error": str(err)}
+
+                threading.Thread(target=bg_dl, daemon=True).start()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"status":"started"}')
+            except Exception as e:
+                self.send_response(400)
+                self.end_headers()
+                self.wfile.write(str(e).encode("utf-8"))
+        elif self.path.startswith("/api/videos/upload"):
+            try:
+                query = urllib.parse.urlparse(self.path).query
+                params = urllib.parse.parse_qs(query)
+                filename = params.get("filename", ["upload.mp4"])[0]
+                aspect = params.get("aspect_mode", ["fill"])[0]
+
+                if self.state.transcode_status.get("busy"):
+                    self.send_response(409)
+                    self.end_headers()
+                    self.wfile.write(b'{"error":"Transkodierung laeuft bereits"}')
+                    return
+
+                length = int(self.headers.get("Content-Length", 0))
+                if length <= 0:
+                    self.send_response(400)
+                    self.end_headers()
+                    self.wfile.write(b'{"error":"Empty file"}')
+                    return
+
+                temp_path = f"/tmp/upload_{int(time.time())}_{filename}"
+                with open(temp_path, "wb") as f:
+                    remaining = length
+                    while remaining > 0:
+                        chunk = self.rfile.read(min(remaining, 65536))
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        remaining -= len(chunk)
+
+                def bg_up():
+                    self.state.transcode_status = {"busy": True, "msg": "Transkodiere hochgeladene Datei...", "error": None}
+                    try:
+                        meta = self.state.vm.transcode_file(temp_path, aspect_mode=aspect)
+                        self.state.set_effect("9")
+                        self.state.transcode_status = {"busy": False, "msg": f"Fertig: {meta.get('title', '')}", "error": None}
+                    except Exception as err:
+                        self.state.transcode_status = {"busy": False, "msg": "", "error": str(err)}
+                    finally:
+                        if os.path.exists(temp_path):
+                            try:
+                                os.remove(temp_path)
+                            except Exception:
+                                pass
+
+                threading.Thread(target=bg_up, daemon=True).start()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"status":"started"}')
+            except Exception as e:
+                self.send_response(400)
+                self.end_headers()
+                self.wfile.write(str(e).encode("utf-8"))
         else:
             self.send_response(404)
             self.end_headers()
@@ -686,19 +993,16 @@ def start_web_server(engine_state, port=80):
     handler = MatrixRequestHandler
     handler.state = engine_state
     
-    server = None
-    for p in [port, 8080]:
+    ports = [port] if port == 8080 else [port, 8080]
+    servers = []
+    for p in ports:
         try:
-            server = HTTPServer(("0.0.0.0", p), handler)
+            srv = HTTPServer(("0.0.0.0", p), handler)
+            t = threading.Thread(target=srv.serve_forever, daemon=True)
+            t.start()
+            servers.append(srv)
             print(f"[INFO] Web Dashboard active at: http://0.0.0.0:{p}")
-            break
         except Exception as e:
-            if p == port:
-                continue
             print(f"[WARN] Could not bind web server to port {p}: {e}")
 
-    if server:
-        t = threading.Thread(target=server.serve_forever, daemon=True)
-        t.start()
-        return server
-    return None
+    return servers[0] if servers else None

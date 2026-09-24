@@ -42,6 +42,7 @@ class MatrixDriver:
         options.multiplexing = self.config.MULTIPLEXING
         options.row_address_type = self.config.ROW_ADDRESS_TYPE
         options.show_refresh_rate = self.config.SHOW_REFRESH_RATE
+        options.drop_privileges = False
 
         if hasattr(self.config, "PWM_DITHER_BITS"):
             options.pwm_dither_bits = self.config.PWM_DITHER_BITS
