@@ -13,3 +13,4 @@ media/videos/*.npy
 media/videos/*.mp4
 media/videos/*.webm
 media/videos/*.mkv
+media/screenshots/

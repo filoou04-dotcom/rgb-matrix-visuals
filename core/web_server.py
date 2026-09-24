@@ -863,6 +863,28 @@ class MatrixRequestHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "application/json")
             self.end_headers()
             self.wfile.write(json.dumps(payload).encode("utf-8"))
+        elif self.path.startswith("/screenshots/"):
+            fname = os.path.basename(urllib.parse.urlparse(self.path).path)
+            fpath = os.path.join(self.state.vm.media_dir, "..", "screenshots", fname)
+            fpath = os.path.abspath(fpath)
+            if os.path.exists(fpath) and os.path.isfile(fpath):
+                ctype = "application/zip" if fname.endswith(".zip") else "image/png"
+                self.send_response(200)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(os.path.getsize(fpath)))
+                if fname.endswith(".zip"):
+                    self.send_header("Content-Disposition", f'attachment; filename="{fname}"')
+                self.end_headers()
+                with open(fpath, "rb") as f_in:
+                    while True:
+                        chunk = f_in.read(65536)
+                        if not chunk:
+                            break
+                        self.wfile.write(chunk)
+                return
+            else:
+                self.send_response(404)
+                self.end_headers()
         elif self.path == "/api/status":
             stats = self.state.get_hardware_stats()
             with self.state.lock:
